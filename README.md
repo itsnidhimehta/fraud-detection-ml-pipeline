@@ -2,11 +2,13 @@
 
 An end-to-end machine learning project that detects fraudulent card transactions — from raw data to a tested, deployed REST API.
 
-It brings together three pieces of ML work in one place:
+It brings together the core ML skills in one place:
 
 1. **ML pipeline** — data cleaning, feature engineering, preprocessing, training, cross-validation, evaluation and model saving
 2. **ML algorithms from scratch** — Linear Regression, Logistic Regression and KNN written with only NumPy, and checked against scikit-learn
-3. **Fraud detection** — 4 models compared on an imbalanced fraud dataset; the best one is served through **FastAPI**
+3. **Supervised vs unsupervised** — 4 supervised classifiers compared with an unsupervised Isolation Forest that never sees the fraud labels
+4. **Model tuning & analysis** — GridSearchCV hyperparameter tuning, decision-threshold trade-off, feature importance
+5. **Production serving** — the best model is served through a tested **FastAPI** service with CI
 
 **Live API:** _add your Render link here after deploying_ (open `/docs` to try it)
 
@@ -27,30 +29,63 @@ It brings together three pieces of ML work in one place:
  3. Preprocess            fill missing values → scale numbers → one-hot encode categories
        │
        ▼
- 4. Train 4 models        Logistic Regression (scratch) · KNN (scratch)
+ 4. Tune                  GridSearchCV over Random Forest hyperparameters (12 combinations)
+       │
+       ▼
+ 5. Train 4 models        Logistic Regression (scratch) · KNN (scratch)
                           Logistic Regression (sklearn) · Random Forest (sklearn)
        │                  + 5-fold stratified cross-validation
        ▼
- 5. Evaluate & pick best  precision, recall, F1, ROC-AUC → best by ROC-AUC
+ 6. Evaluate & pick best  precision, recall, F1, ROC-AUC → best by ROC-AUC
+       │                  + threshold analysis + feature importance
+       │                  + unsupervised Isolation Forest for comparison
+       ▼
+ 7. Save pipeline         models/fraud_model.joblib (preprocessing + model together)
        │
        ▼
- 6. Save pipeline         models/fraud_model.joblib (preprocessing + model together)
-       │
-       ▼
- 7. FastAPI service       /predict  /predict/batch  /model-info  /health
+ 8. FastAPI service       /predict  /predict/batch  /model-info  /health
 ```
 
 ## Results (test set, 4,000 transactions, ~3% fraud)
+
+### Supervised models (trained with fraud labels)
 
 | Model | Precision | Recall | F1 | ROC-AUC |
 |---|---|---|---|---|
 | Logistic Regression (from scratch) | 0.45 | 0.76 | 0.56 | 0.879 |
 | KNN, k=5 (from scratch) | 0.99 | 0.59 | 0.74 | 0.841 |
-| Logistic Regression (scikit-learn) | 0.46 | 0.76 | 0.57 | 0.879 |
-| **Random Forest (scikit-learn) — deployed** | **0.71** | **0.73** | **0.72** | **0.893** |
+| Logistic Regression (scikit-learn) | 0.46 | 0.76 | 0.57 | 0.878 |
+| **Random Forest, tuned (scikit-learn) — deployed** | **0.94** | **0.67** | **0.78** | **0.882** |
+
+### Unsupervised model (trained WITHOUT fraud labels)
+
+| Model | Precision | Recall | ROC-AUC |
+|---|---|---|---|
+| Isolation Forest | 0.67 | 0.55 | 0.874 |
+
+Without ever seeing a fraud label, Isolation Forest ranks transactions almost as well as the supervised models — useful for new fraud patterns that nobody has labelled yet.
+
+### Threshold trade-off (deployed Random Forest)
+
+| Threshold | Precision | Recall | Transactions flagged |
+|---|---|---|---|
+| 0.3 | 0.80 | 0.72 | 108 |
+| **0.5 (default)** | **0.94** | **0.67** | **85** |
+| 0.7 | 1.00 | 0.49 | 58 |
+
+Lower threshold → catch more fraud but more false alarms. The right setting is a business decision (cost of missed fraud vs cost of blocking a genuine customer).
+
+### Top features (deployed Random Forest)
+
+`distance_from_home_km` · `amount_to_avg_ratio` · `account_age_days` · `txn_count_last_24h` · `amount`
+
+`amount_to_avg_ratio` is an engineered feature (not in the raw data) and is the 2nd most important — feature engineering adds real value.
+
+### Notes
 
 - **Why not accuracy?** Only ~3% of transactions are fraud, so a model that always says "not fraud" would be 97% accurate and completely useless. Precision, recall, F1 and ROC-AUC show how well fraud is actually caught.
-- **Why Random Forest?** Highest ROC-AUC, and the best balance: it catches 73% of fraud while 71% of its alerts are real fraud. KNN looks precise but misses 41% of fraud.
+- **Why Random Forest?** Highest ROC-AUC on the test set; at the default threshold 94% of its alerts are real fraud and it catches 67% of fraud.
+- **Tuning:** GridSearchCV picked 200 trees, no depth limit, min 1 row per leaf (CV ROC-AUC 0.944). The test-set score (0.882) is lower than the CV score — a reminder to always confirm on unseen data.
 - **From-scratch check:** my Logistic Regression scores 0.879 vs scikit-learn's 0.879, and my KNN gives identical probabilities to scikit-learn's — so the maths is correct.
 
 ## From scratch vs scikit-learn
@@ -74,6 +109,8 @@ fraud-detection-ml-pipeline/
 │   ├── data.py                generate / load / clean the dataset
 │   ├── features.py            feature engineering + preprocessing pipeline
 │   ├── train.py               train, cross-validate, compare, save best model
+│   ├── tuning.py              GridSearchCV hyperparameter tuning
+│   ├── unsupervised.py        Isolation Forest anomaly detection (no labels)
 │   ├── predict.py             load model, score one transaction
 │   ├── compare_scratch.py     from-scratch vs scikit-learn comparison
 │   └── scratch/
@@ -83,7 +120,7 @@ fraud-detection-ml-pipeline/
 ├── api/
 │   ├── main.py                FastAPI app (endpoints, request logging)
 │   └── schemas.py             Pydantic input validation
-├── tests/                     15 pytest tests (algorithms, pipeline, API)
+├── tests/                     17 pytest tests (algorithms, pipeline, API)
 ├── .github/workflows/tests.yml   CI: runs training + tests on every push
 ├── render.yaml                deployment config for Render
 └── requirements.txt
@@ -109,7 +146,7 @@ uvicorn api.main:app --reload  # starts the API → open http://127.0.0.1:8000/d
 | Method | Endpoint | What it does |
 |---|---|---|
 | GET | `/health` | Is the service up and the model loaded? |
-| GET | `/model-info` | Which model is serving and its test scores |
+| GET | `/model-info` | Serving model, test scores, best hyperparameters, top features, threshold trade-off |
 | POST | `/predict` | Score one transaction |
 | POST | `/predict/batch` | Score up to 1,000 transactions |
 

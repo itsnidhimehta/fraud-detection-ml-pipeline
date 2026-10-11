@@ -35,6 +35,7 @@ def test_model_info(client):
     body = client.get("/model-info").json()
     assert body["model"] in body["all_models_compared"]
     assert 0 <= body["test_metrics"]["roc_auc"] <= 1
+    assert "amount_to_avg_ratio" in body["top_features"]  # my engineered feature matters
 
 
 def test_predict_suspicious_vs_normal(client):

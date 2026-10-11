@@ -5,7 +5,7 @@ Then open:    http://127.0.0.1:8000/docs   (interactive Swagger page to try it)
 
 Endpoints:
   GET  /health         -> is the service up and is the model loaded?
-  GET  /model-info     -> which model is serving and its test-set scores
+  GET  /model-info     -> which model is serving, its scores, top features, threshold trade-off
   POST /predict        -> score one transaction
   POST /predict/batch  -> score up to 1000 transactions at once
 """
@@ -84,6 +84,10 @@ def model_info():
         "decision_threshold": metrics["decision_threshold"],
         "test_metrics": metrics["results"][best],
         "all_models_compared": {name: m["roc_auc"] for name, m in metrics["results"].items()},
+        "best_hyperparameters": metrics.get("hyperparameter_tuning", {}).get("best_params"),
+        "top_features": metrics.get("feature_importance"),
+        "threshold_analysis": metrics.get("threshold_analysis"),
+        "unsupervised_isolation_forest": metrics.get("unsupervised_isolation_forest"),
     }
 
 
