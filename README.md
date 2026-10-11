@@ -10,7 +10,7 @@ It brings together the core ML skills in one place:
 4. **Model tuning & analysis** — GridSearchCV hyperparameter tuning, decision-threshold trade-off, feature importance
 5. **Production serving** — the best model is served through a tested **FastAPI** service with CI
 
-**Live API:** _add your Render link here after deploying_ (open `/docs` to try it)
+**Live API:** https://fraud-detection-api-ji5z.onrender.com/docs — try `/predict` in the browser (free hosting: the first request after inactivity can take ~50 seconds while the server wakes up)
 
 ---
 
