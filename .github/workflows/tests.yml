@@ -1,0 +1,22 @@
+# Runs automatically on every push: install, train the model, run all tests.
+# A green tick on GitHub means the whole pipeline still works end to end.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Train model
+        run: python -m src.train
+      - name: Run tests
+        run: pytest -v

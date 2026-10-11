@@ -1,0 +1,13 @@
+# Render.com deployment (free plan). Render reads this file automatically.
+# Build: install packages + train the model. Start: run the FastAPI server.
+services:
+  - type: web
+    name: fraud-detection-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt && python -m src.train
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
